@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body{
+                margin: 0;
+            }
+
+            #container{
+                width: 650px;
+                height: 550px;
+                margin: 0 auto;
+                margin-top: 150px;
+                background-color: rgb(235, 235, 235);
+            }
+
+            .object_svg{
+                position: absolute;
+                overflow: visible;
+            }
+
+            .object_line{
+                stroke: rgb(0, 0, 0);
+                stroke-width: 1px;
+            }
+
+            .object_polygon{
+                fill: rgb(0, 0, 0);
+            }
+        </style>
+    </head>
+
+    <body>
+        <div id="container">
+
+        </div>
+    </body>
+
+    <script defer>
+        const container = document.getElementById("container")
+
+        var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        var svgNS = svg.namespaceURI;
+
+        class Vector2{
+            constructor(x, y){
+                this.x = x
+                this.y = y
+            }
+
+            add(v){
+                return new Vector2(this.x + v.x, this.y + v.y)
+            }
+
+            sub(v){
+                return new Vector2(this.x - v.x, this.y - v.y)
+            }
+
+            mul(f){
+                return new Vector2(this.x * f, this.y * f)
+            }
+
+            div(f){
+                return new Vector2(this.x / f, this.y / f)
+            }
+
+            dot(v){
+                return this.x*v.x + this.y*v.y
+            }
+
+            mag(){
+                return Math.sqrt(Math.pow(this.x, 2) + Math.pow(this.y, 2))
+            }
+
+            unit(){
+                return this.div(this.mag())
+            }
+        }
+
+        function clamp(x, min, max){
+            if (x < min){
+                return min
+            }
+
+            if (x > max){
+                return max
+            }
+
+            return x
+        }
+
+        function projectPoly(axis, vertices){
+            let min = axis.dot( vertices[0] )
+            let max = min
+
+            // Due to the cyclist nature of the vertices we neglect the last one and as it equals to the first
+            for (let i = 1; i < vertices.length; i++){
+                let prj = axis.dot( vertices[i] )
+                min = Math.min(prj, min)
+                max = Math.max(prj, max)
+            }
+
+            return [min, max]
+        }
+
+        function overlap(prj1, prj2){
+            return !(prj1[1] < prj2[0] || prj2[1] < prj1[0])
+        }
+
+        function getPerpAxes(vertices){
+            const axes = []
+            for (let i = 0; i < vertices.length; i++){
+                const p1 = vertices[i]
+                const p2 = vertices[(i + 1) % vertices.length] // Ensure cycle possibility for the last and first vertices
+                const edge = p2.sub(p1)
+                const normal = new Vector2( -edge.y, edge.x )
+                axes.push(normal)
+            }
+
+            return axes
+        }
+
+        function areColliding(vertices1, vertices2){
+            const axes1 = getPerpAxes(vertices1)
+            const axes2 = getPerpAxes(vertices2)
+            for (const axis of axes1.concat(axes2)){
+                const prj1 = projectPoly(axis, vertices1)
+                const prj2 = projectPoly(axis, vertices2)
+                if (!overlap(prj1, prj2)){
+                    return false
+                }
+            }
+
+            return true
+        }
+        
+        let vp_height = 550
+
+        let g = 0
+        let restitution = 1
+
+        let physics_calculation_last_step = {}
+
+        const objects = []
+        class Object{
+            constructor(sides, size, mass, position, initial_velocity, color){
+                var [svg, vertices] = CreateSVG(sides, size.x, size.y, color)
+                this.svg = svg
+                this.vertices = vertices
+                this.sides = sides
+                this.size = size
+                this.mass = mass
+                this.position = position
+                this.velocity = initial_velocity
+                this.fixed = false
+                objects.push( this )
+                this.id = objects.length
+            }
+
+            setFixed(val){
+                this.fixed = val
+            }
+
+            update(dt){
+                if (this.fixed){
+                    this.svg.style.marginLeft = this.position.x - this.size.x + "px"
+                    this.svg.style.marginTop = this.position.y - this.size.y + "px"
+                    return
+                }
+
+                let F = new Vector2(0, 0)
+                F = F.sub( new Vector2(0, -this.mass*g) )
+
+                let acceleration = F.div(this.mass)
+
+                this.velocity = this.velocity.add( acceleration )
+                
+                this.position = this.position.add( this.velocity.mul(dt) )
+                if (this.position.x == NaN || this.position.y == NaN){
+                    this.position = new Vector2(0, 0)
+                }
+
+                /*
+                if (this.position.y >= vp_height - this.radius/2 && this.velocity.y > 0){
+                    this.velocity = new Vector2(this.velocity.x, -this.velocity.y, this.velocity.z)
+                }
+
+                if (this.position.y <= this.radius && this.velocity.y < 0){
+                    this.velocity = new Vector2(this.velocity.x, -this.velocity.y, this.velocity.z)
+                }
+            
+                this.position = new Vector2(
+                    this.position.x,
+                    clamp(this.position.y, this.radius, vp_height - this.radius/2)
+                )
+                */
+
+                this.svg.style.marginLeft = this.position.x - this.size.x + "px"
+                this.svg.style.marginTop = this.position.y - this.size.y + "px"
+            }
+
+            checkCollisions(){
+                const vertices1 = this.vertices.map(v => v.add(this.position))
+                for (const obj of objects){
+                    if (obj !== this){
+                        console.log("computing...")
+                        if (physics_calculation_last_step[obj.id + " " + this.id] == true || physics_calculation_last_step[this.id + " " + obj.id] == true){
+                            continue
+                        }
+                        
+                        physics_calculation_last_step[obj.id + " " + this.id] = true
+                        const vertices2 = obj.vertices.map(v => v.add(obj.position))
+
+                        if (areColliding(vertices1, vertices2)){
+                            console.log("true")
+                            const relativeVelocity = this.velocity.sub(obj.velocity)
+                            let dir = this.position.sub(obj.position).unit()
+                            const impulse = dir.mul(relativeVelocity.dot(dir) * (1 + restitution) / (1 / this.mass + 1 / obj.mass))
+                            this.velocity = this.velocity.sub( impulse.div(this.mass) )
+                            obj.velocity = obj.velocity.add( impulse.div(obj.mass) )
+                        } else {
+                            console.log("false")
+                        }
+                    }
+                }
+            }
+        }
+
+        function CreateSVG(sides, w, h, color){
+            const svg = document.createElementNS(svgNS, "svg")
+            svg.setAttribute("width", w*2)
+            svg.setAttribute("height", h*2)
+            svg.classList.add("object_svg")
+            container.appendChild(svg)
+
+            let last_point = null
+
+            let vertices = []
+            let points = ""
+            for (let a = 0; a <= 360 + 360/sides/2; a += 360/sides){
+                let rad_a = (90 - 360/sides/2 + a)/180*Math.PI
+
+                let x = Math.cos(rad_a)*w + w
+                let y = Math.sin(rad_a)*h + h
+                if (last_point != null){
+                    /*
+                    const line = document.createElementNS(svgNS, "line")
+                    line.classList.add("object_line")
+                    line.setAttribute("x1", last_point[0])
+                    line.setAttribute("y1", last_point[1])
+                    line.setAttribute("x2", x)
+                    line.setAttribute("y2", y)
+                    svg.appendChild(line)
+                    */
+                }
+
+                points += `${x},${y} `
+                last_point = [x, y]
+                vertices.push( new Vector2(x, y) )
+            }
+
+            const polygon = document.createElementNS(svgNS, "polygon");
+            polygon.classList.add("object_polygon");
+            polygon.style.fill = color
+            polygon.setAttribute("points", points.trim());
+            svg.appendChild(polygon);
+            return [svg, vertices]
+        }
+
+        // const floor = new Object(4, new Vector2(450, 50), 30, new Vector2(325, 510), new Vector2(0, 0), "rgb(125, 255, 125)" )
+        // floor.setFixed(true)
+        new Object(3, new Vector2(50, 50), 30, new Vector2(325, 90), new Vector2(0, 0), "rgb(245, 60, 25)" )
+        new Object(5, new Vector2(50, 50), 30, new Vector2(525, 90), new Vector2(0, 0), "rgb(245, 0, 250)" )
+
+
+        let SPS = 60 // Physics steps per second
+        let dt = 1/SPS
+        setInterval(() => {
+            objects.forEach(e => {
+                e.update(dt)
+            });
+
+            for (const obj of objects){
+                obj.checkCollisions()
+            }
+            
+            physics_calculation_last_step = {}
+        }, 1000*1/SPS);
+    </script>
+</html>
