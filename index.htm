@@ -205,7 +205,6 @@
                 const vertices1 = this.vertices.map(v => v.add(this.position))
                 for (const obj of objects){
                     if (obj !== this){
-                        console.log("computing...")
                         if (physics_calculation_last_step[obj.id + " " + this.id] == true || physics_calculation_last_step[this.id + " " + obj.id] == true){
                             continue
                         }
