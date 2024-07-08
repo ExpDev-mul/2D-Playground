@@ -125,20 +125,31 @@
         function areColliding(vertices1, vertices2){
             const axes1 = getPerpAxes(vertices1)
             const axes2 = getPerpAxes(vertices2)
+
+            let translations = []
             for (const axis of axes1.concat(axes2)){
                 const prj1 = projectPoly(axis, vertices1)
                 const prj2 = projectPoly(axis, vertices2)
                 if (!overlap(prj1, prj2)){
-                    return false
+                    return [false, new Vector2(0, 0)]
                 }
+
+                let ol = Math.abs(prj2[1] - prj1[0])
+                let ofs = axis.mul(ol).unit().mul(35)
+                translations.push(ofs)
             }
 
-            return true
+            translations.sort((a, b) => {
+                return a.mag() < b.mag()
+            })
+
+            return [true, translations[0]]
         }
         
+        let vp_width = 650
         let vp_height = 550
 
-        let g = 0
+        let g = 1
         let restitution = 1
 
         let physics_calculation_last_step = {}
@@ -146,8 +157,9 @@
         const objects = []
         class Object{
             constructor(sides, size, mass, position, initial_velocity, color){
-                var [svg, vertices] = CreateSVG(sides, size.x, size.y, color)
+                var [svg, polygon, vertices] = CreateSVG(sides, size.x, size.y, color)
                 this.svg = svg
+                this.polygon = polygon
                 this.vertices = vertices
                 this.sides = sides
                 this.size = size
@@ -157,6 +169,8 @@
                 this.fixed = false
                 objects.push( this )
                 this.id = objects.length
+                this.rotate = 0
+                this.torque = 50
             }
 
             setFixed(val){
@@ -164,6 +178,10 @@
             }
 
             update(dt){
+                this.vertices = UpdateSVG(this)
+
+                this.rotate += this.torque*dt
+
                 if (this.fixed){
                     this.svg.style.marginLeft = this.position.x - this.size.x + "px"
                     this.svg.style.marginTop = this.position.y - this.size.y + "px"
@@ -182,20 +200,26 @@
                     this.position = new Vector2(0, 0)
                 }
 
-                /*
-                if (this.position.y >= vp_height - this.radius/2 && this.velocity.y > 0){
+                if (this.position.y >= vp_height - this.size.y/2 && this.velocity.y > 0){
                     this.velocity = new Vector2(this.velocity.x, -this.velocity.y, this.velocity.z)
                 }
 
-                if (this.position.y <= this.radius && this.velocity.y < 0){
+                if (this.position.y <= this.size.y && this.velocity.y < 0){
                     this.velocity = new Vector2(this.velocity.x, -this.velocity.y, this.velocity.z)
+                }
+
+                if (this.position.x >= vp_width - this.size.x/2 && this.velocity.x > 0){
+                    this.velocity = new Vector2(-this.velocity.x, this.velocity.y, this.velocity.z)
+                }
+
+                if (this.position.x <= this.size.x && this.velocity.x < 0){
+                    this.velocity = new Vector2(-this.velocity.x, this.velocity.y, this.velocity.z)
                 }
             
                 this.position = new Vector2(
-                    this.position.x,
-                    clamp(this.position.y, this.radius, vp_height - this.radius/2)
+                    clamp(this.position.x, this.size.x, vp_width - this.size.x/2),
+                    clamp(this.position.y, this.size.y, vp_height - this.size.y/2)
                 )
-                */
 
                 this.svg.style.marginLeft = this.position.x - this.size.x + "px"
                 this.svg.style.marginTop = this.position.y - this.size.y + "px"
@@ -205,22 +229,27 @@
                 const vertices1 = this.vertices.map(v => v.add(this.position))
                 for (const obj of objects){
                     if (obj !== this){
-                        if (physics_calculation_last_step[obj.id + " " + this.id] == true || physics_calculation_last_step[this.id + " " + obj.id] == true){
-                            continue
-                        }
-                        
-                        physics_calculation_last_step[obj.id + " " + this.id] = true
                         const vertices2 = obj.vertices.map(v => v.add(obj.position))
 
-                        if (areColliding(vertices1, vertices2)){
-                            console.log("true")
+                        const data = areColliding(vertices1, vertices2)
+                        const colliding = data[0]
+                        const translation = data[1]
+                        if (colliding){
+                            console.log(translation.mag())
+                            if (physics_calculation_last_step[obj.id + " " + this.id] == true || physics_calculation_last_step[this.id + " " + obj.id] == true){
+                                continue
+                            }
+
+                            physics_calculation_last_step[obj.id + " " + this.id] = true
+
+                            // this.position = this.position.add(translation)
                             const relativeVelocity = this.velocity.sub(obj.velocity)
-                            let dir = this.position.sub(obj.position).unit()
+                            let dir = this.velocity.sub(obj.velocity).unit()
                             const impulse = dir.mul(relativeVelocity.dot(dir) * (1 + restitution) / (1 / this.mass + 1 / obj.mass))
                             this.velocity = this.velocity.sub( impulse.div(this.mass) )
                             obj.velocity = obj.velocity.add( impulse.div(obj.mass) )
                         } else {
-                            console.log("false")
+                            physics_calculation_last_step[obj.id + " " + this.id] = false
                         }
                     }
                 }
@@ -240,7 +269,7 @@
             let points = ""
             for (let a = 0; a <= 360 + 360/sides/2; a += 360/sides){
                 let rad_a = (90 - 360/sides/2 + a)/180*Math.PI
-
+                
                 let x = Math.cos(rad_a)*w + w
                 let y = Math.sin(rad_a)*h + h
                 if (last_point != null){
@@ -265,13 +294,57 @@
             polygon.style.fill = color
             polygon.setAttribute("points", points.trim());
             svg.appendChild(polygon);
-            return [svg, vertices]
+            return [svg, polygon, vertices]
         }
+
+        function UpdateSVG(obj){
+            const svg = obj.svg
+
+            let last_point = null
+
+            let sides = obj.sides
+            let w = obj.size.x
+            let h = obj.size.y
+
+            let vertices = []
+            let points = ""
+            for (let a = 0; a <= 360 + 360/sides/2; a += 360/sides){
+                let rad_a = (90 - 360/sides/2 + a + obj.rotate)/180*Math.PI
+
+                let x = Math.cos(rad_a)*w + w
+                let y = Math.sin(rad_a)*h + h
+                if (last_point != null){
+                    /*
+                    const line = document.createElementNS(svgNS, "line")
+                    line.classList.add("object_line")
+                    line.setAttribute("x1", last_point[0])
+                    line.setAttribute("y1", last_point[1])
+                    line.setAttribute("x2", x)
+                    line.setAttribute("y2", y)
+                    svg.appendChild(line)
+                    */
+                }
+
+                points += `${x},${y} `
+                last_point = [x, y]
+                vertices.push( new Vector2(x, y) ) 
+            }
+
+            const polygon = obj.polygon
+            polygon.style.fill = obj.color
+            polygon.setAttribute("points", points.trim());
+            return vertices
+        }
+
+
 
         // const floor = new Object(4, new Vector2(450, 50), 30, new Vector2(325, 510), new Vector2(0, 0), "rgb(125, 255, 125)" )
         // floor.setFixed(true)
-        new Object(3, new Vector2(50, 50), 30, new Vector2(325, 90), new Vector2(0, 0), "rgb(245, 60, 25)" )
-        new Object(5, new Vector2(50, 50), 30, new Vector2(525, 90), new Vector2(0, 0), "rgb(245, 0, 250)" )
+        new Object(3, new Vector2(50, 50), 30, new Vector2(325, 0), new Vector2(0, 0), "rgb(245, 60, 25)" )
+        new Object(5, new Vector2(50, 50), 90, new Vector2(400, 800), new Vector2(250, 0), "rgb(245, 0, 250)" )
+        new Object(4, new Vector2(50, 50), 200, new Vector2(250, 300), new Vector2(250, 0), "rgb(250, 0, 0)" )
+        new Object(8, new Vector2(50, 50), 70, new Vector2(0, 0), new Vector2(250, 0), "rgb(0, 0, 0)" )
+
 
 
         let SPS = 60 // Physics steps per second
@@ -284,8 +357,8 @@
             for (const obj of objects){
                 obj.checkCollisions()
             }
-            
-            physics_calculation_last_step = {}
+
+            // physics_calculation_last_step = []
         }, 1000*1/SPS);
     </script>
 </html>
