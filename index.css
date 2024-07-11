@@ -1,0 +1,71 @@
+::placeholder{
+    color: rgb(0, 0, 0);
+}
+
+body{
+    margin: 0;
+}
+
+#container{
+    width: 650px;
+    height: 550px;
+    margin: 0 auto;
+    margin-top: 150px;
+    background-color: rgb(235, 235, 235);
+}
+
+.object_svg{
+    position: absolute;
+    overflow: visible;
+}
+
+.object_line{
+    stroke: rgb(0, 0, 0);
+    stroke-width: 1px;
+}
+
+.object_polygon{
+    fill: rgb(0, 0, 0);
+}
+
+#sides_input{
+    width: 130px;
+    height: 10px;
+    border-radius: 5px;
+    outline: none;
+    border: none;
+    background-color: rgb(255, 255, 255);
+    border: 2px solid rgb(0, 0, 0);
+    color: rgb(0, 0, 0);
+    margin-left: calc(50% - 75px);
+    margin-top: 20px;
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    font-family: Roboto;
+    font-weight: 1000;
+    transition-duration: 0.2s;
+}
+
+#sides_input:focus{
+    background-color: rgb(0, 0, 0);
+    color: rgb(0, 245, 125);
+}
+
+#add{
+    width: 150px;
+    height: 30px;
+    border-radius: 5px;
+    outline: none;
+    border: none;
+    background-color: rgb(0, 245, 125);
+    margin-left: calc(50% - 75px);
+    margin-top: 10px;
+    font-family: Roboto;
+    font-weight: 1000;
+}
+
+#add:hover{
+    cursor: pointer;
+}
