@@ -108,7 +108,7 @@ function areColliding(vertices1, vertices2){
 let vp_width = 650
 let vp_height = 550
 
-let g = 1
+let g = 4
 let restitution = 1
 
 let physics_calculation_last_step = {}
@@ -131,7 +131,7 @@ class Object{
         objects.push( this )
         this.id = objects.length
         this.rotate = 0
-        this.torque = 50
+        this.torque = 180
     }
 
     setFixed(val){
@@ -365,7 +365,7 @@ document.getElementById("add").addEventListener("click", () => {
             (new Vector2(1, 1)).mul(40), // Size
             randomRange(50, 1000), // Mass
             new Vector2(randomRange(70, 500), randomRange(20, 20)), // Initial position
-            new Vector2(randomRange(-300, 300), randomRange(-300, 300)), // Initial velocity
+            new Vector2(randomRange(-300, 300), randomRange(0, 0)), // Initial velocity
             colors[current_color] // Color
         )
 
